@@ -50,7 +50,7 @@ export default function PurchaseOrdersPage() {
     },
   });
 
-  const filteredPos = pos?.data?.filter((po: any) => {
+    const filteredPos = (pos as any)?.data?.filter((po: any) => {
     const matchesSearch = !searchTerm || 
       po.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       po.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase());
