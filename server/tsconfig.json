@@ -1,11 +1,19 @@
 {
   "compilerOptions": {
-    "outDir": "../dist/server",
-    "rootDir": "./",
-    "module": "commonjs",
-    "target": "es2020",
-    "esModuleInterop": true,
-    "strict": true
+    "target": "es2020", // modern JavaScript output
+    "module": "esnext", // ES module system
+    "moduleResolution": "node", // resolve like Node.js
+    "esModuleInterop": true, // allow default imports from CommonJS
+    "skipLibCheck": true, // faster builds, skip type checks in libs
+    "forceConsistentCasingInFileNames": true,
+    "rootDir": "./", // only compile files inside /server
+    "outDir": "../dist/server" // compiled JS output folder
   },
-  "include": [ "**/*.ts" ]
+  "include": [ "./**/*.ts" ], // include all TS files inside server/
+  "exclude": [
+    "../vite.config.ts",
+    "../tailwind.config.ts",
+    "../drizzle.config.ts",
+    "../*.config.ts" // exclude any root-level configs
+  ]
 }
