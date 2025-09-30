@@ -5,9 +5,12 @@
     "moduleResolution": "node",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "strict": false, // turn off strict mode
-    "noImplicitAny": false, // allow "any" everywhere
+    "strict": false, // turn off strict checking
+    "noImplicitAny": false, // allow any type
     "suppressImplicitAnyIndexErrors": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": false,
     "outDir": "dist",
     "rootDir": "."
   },
