@@ -1,0 +1,299 @@
+Replit Agent Prompt — Build Darbco Inventory + Procurement + Suppliers (Full-Cycle) Web App
+
+Important
+I’m not experienced with programming. Please:
+
+Explain your plan in plain language first.
+
+Show the full file tree you intend to generate before creating files.
+
+Build in small, testable steps and print clear run instructions after each step.
+
+Add comments and READMEs so I can run everything without guesswork.
+
+0) Context & Goal (Fit to Darbco Process)
+
+Build a production-ready web system for Darbco (manufacturing/ops in Jordan) that replaces our Google Sheets and mirrors our exact process:
+
+Process flow
+RFQ → Quote Comparison → PO (with approvals) → GRN/Inspection → Put-Away → Issue (MIN) / Return (MRN) → Transfers/Adjustments → Supplier Invoice → 3-Way Match → Close.
+
+Daily Transactions Record (DTR) is the single ledger for all stock movements, including Fabrication (assembly/build) and Unbuild.
+
+We also need Production Planning with drag-and-drop BOM designer, Work Orders (WO), Backflush, Scrap, Row-level permissions/scopes, Arabic/English, Jordan VAT, and barcode/QR workflows.
+
+1) Tech Stack & Project Conventions
+
+Frontend: HTML, CSS, Bootstrap, Vanilla JS modules (fetch APIs). RTL support for Arabic. PWA-style pages for scanning.
+
+Backend: PHP + MySQL.
+
+API Responses: always
+
+{ "success": boolean, "message": string, "data": object | null }
+
+
+Project structure (please generate exactly):
+
+/controls/
+  connection.php            // Exposes $conn (PDO), utf8mb4
+  api_response.php          // print_response($success,$message,$data=null)
+/api/
+  config.php                // includes controls/* ; env, JWT, validators, RBAC, scopes
+  middleware.php            // auth(), require_permission(), apply_scopes()
+  helpers/
+    seq.php                 // sequential voucher codes
+    dtr.php                 // unified stock posting, build/backflush helpers
+    pdf.php                 // voucher PDFs (PO/GRN/MIN/MRN/WO)
+    csv.php                 // CSV import/export + dry-run validator
+    cache.php               // optional caching for masters
+  modules/
+    items.php
+    suppliers.php
+    procurement.php         // rfq, quotes, po, 3-way match basics
+    receiving.php           // grn, put-away
+    inventory.php           // min, mrn, transfer, adjust
+    production.php          // bom, wo, reserve, pick/issue, build/unbuild, scrap
+    reports.php
+    admin.php               // users, roles, settings (valuation, VAT, locales, approvals)
+  routes.php                // maps HTTP routes to module functions
+/public/
+  index.php                 // route entry
+/assets/{css,js,images}/
+/tests/                     // PHPUnit tests (see Acceptance Tests)
+/postman_collection.json
+/openapi.json
+README.md
+
+
+Database defaults: InnoDB, FKs on, UTC timestamps, soft-delete via status, and created_at/updated_at with automatic update.
+
+2) Roles, Permissions, and Row-Level Data Scoping
+
+Roles (RBAC): Admin, Procurement, Storekeeper, Production Planner, Shop Supervisor, Finance, Auditor/Viewer.
+
+Permissions (examples):
+bom.create, bom.edit, bom.activate_version, wo.create, wo.release, wo.post_build, inventory.issue, inventory.return, inventory.adjust, grn.create, putaway.confirm, report.view.ops, report.view.finance, etc.
+
+Scopes (row-level visibility): Users can be restricted by warehouse_scope, bin_scope, department_scope, supplier_scope. All list/read/write endpoints must enforce scope server-side via apply_scopes() (SQL WHERE injection).
+
+3) Core Modules & Workflows
+A) Master Data
+
+Items (code, name, spec, UOM, category, ABC/XYZ, image, min/max/ROP, lead time, default supplier, batch/serial flags), Warehouses/Bins, Suppliers (who supplies what, MOQs, price breaks, last price, lead time), BOM/BoQ (multi-version).
+
+B) Procurement
+
+RFQ → Quotes (capture price & lead time) → Quote Comparison → PO (with approval routing, Jordan VAT, currency, terms).
+Receiving: GRN + optional Inspection (accept/reject, defects, photos). Put-Away (suggested bins).
+3-Way match basics (PO ↔ GRN ↔ Invoice) with discrepancy flagging.
+
+C) Inventory Ops (+ DTR Ledger)
+
+Unified DTR types: GRN, PUTAWAY, ISSUE (MIN), RETURN (MRN), TRANSFER, ADJUST, ASSEMBLY_BUILD, ASSEMBLY_UNBUILD.
+Transfers (WH↔WH, bin↔bin, in-transit), Cycle counts & Adjustments with approvals.
+Valuation: choose FIFO or Weighted Average (WAV) at system level; keep a valuation log.
+
+D) Production Planning & Fabrication
+
+Planner (MRP-Lite): Net requirements = Demand – (On-hand – Safety – Reserved) – On-order; show shortages.
+
+Work Orders: DRAFT → RELEASED → IN_PROGRESS → QA → DONE/CLOSED, with component Reservation, Pick/Issue (MIN), and Build/Unbuild.
+
+BOM Designer (drag-and-drop): versioned; lines include {component_item, qty_per_parent, UOM, wastage_pct, alt_item?}; can set backflush_default.
+
+Backflush (optional): On ASSEMBLY_BUILD, auto-issue components = build_qty * qty_per_parent * (1+wastage_pct).
+
+Scrap: post ADJUST with reason=SCRAP; show in WO traceability.
+
+Costing: Finished good unit cost on build = sum(issued component cost ± overhead) / built qty (respect FIFO/WAV).
+
+E) Supplier KPIs & Scorecards
+
+OTIF, defect rate, lead-time adherence, price variance, comms responsiveness → supplier score and tiering.
+
+F) Planning & Replenishment
+
+Min/Max/ROP suggestions, EOQ helper; SMA/EMA forecasts later.
+
+G) Dashboards & Pages
+
+Ops Cockpit (cards: below-min, late POs, today’s receipts/issues, top movers, approvals).
+
+Procurement Board (RFQ/PO pipeline).
+
+Item 360 (stock by bin, movements, valuation, suppliers, lead-time stats).
+
+Supplier 360 (scorecard trends, open POs, claims).
+
+Planner Board (WOs by status).
+
+BOM Designer (drag-drop tree).
+
+Fabrication Console (Start/Pause/Post Build/Scrap with big buttons & scanning).
+
+4) API Endpoints (non-exhaustive, follow response format)
+
+Auth
+
+POST /api/auth/login -> {token, user, role} (JWT)
+
+GET /api/auth/me
+
+Master Data
+
+POST /api/items/create, GET /api/items/list?search&page, PUT /api/items/{id}, POST /api/items/bulk-import
+
+GET /api/lookup/item?key=, GET /api/lookup/supplier?key=, GET /api/lookup/location?key=, GET /api/lookup/batch-serial?item_id=
+
+Procurement
+
+POST /api/rfq/create, POST /api/quote/record, GET /api/rfq/{id},
+
+POST /api/po/create, PUT /api/po/{id}/approve, GET /api/po/{id}
+
+Receiving & Inventory
+
+POST /api/grn/create, POST /api/putaway/confirm
+
+POST /api/min/create, POST /api/min/{id}/issue, POST /api/mrn/create
+
+POST /api/transfer/create, POST /api/adjustment/create
+
+GET /api/dtr/list?from&to&type&item_code&wo
+
+Production
+
+POST /api/bom/create, PUT /api/bom/{id}/activate, GET /api/bom/{parent_item_id}/active, PUT /api/bom/{id}/reorder, POST /api/bom/{id}/line/add, DELETE /api/bom/line/{line_id}, PUT /api/bom/line/{line_id}
+
+POST /api/wo/create, PUT /api/wo/{id}/release, POST /api/wo/{id}/reserve, GET /api/wo/{id}, GET /api/wo/list?status&item&due_from&due_to
+
+POST /api/wo/{id}/pick/create, POST /api/wo/pick/{pick_id}/issue
+
+POST /api/wo/{id}/build, POST /api/wo/{id}/scrap, POST /api/wo/{id}/unbuild
+
+Reports & Printing
+
+GET /api/replenishment/suggestions
+
+GET /api/suppliers/{id}/scorecard?period=YYYY-MM
+
+GET /api/print/{voucher}/{id} // PDF for PO/GRN/MIN/MRN/WO
+
+Admin & Settings
+
+GET /api/settings, PUT /api/settings // valuation (FIFO/WAV), VAT %, locales (en/ar), approval limits, etc.
+
+GET /api/audit?entity=po&id=…
+
+5) DTR & Sequencing (helpers)
+
+DTR: All stock moves use helpers/dtr.php::post_transaction() inside SQL transaction.
+
+Voucher codes: seq.php::next_code($prefix) → PO-YYYY-####, GRN-YYYY-####, MIN-YYYY-####, MRN-YYYY-####, WO-YYYY-####, BLD-YYYY-####, etc.
+
+Idempotency: on all POSTs, honor X-Client-Request-Id (do not double-post the same request).
+
+6) UX “Final Touches”
+
+Auto-fill & Typeahead (items/suppliers/locations) with lookup endpoints; when item selected, fill UOM, default supplier, last price, lead time, bin-level availability; prompt batch/serial modal if needed.
+
+Barcode/QR scan-first buttons on GRN/Put-Away/MIN/MRN/WO build (focus input; decode item/lot/serial or voucher code).
+
+Role-aware defaults (Storekeeper lands on their WH/bin; Planner defaults last BOM version).
+
+Keyboard flow (Enter adds line; Tab steps qty→bin→next line).
+
+Guard rails: idempotent POSTs; conflict detection if stock changes during edit; optimistic UI then reconcile.
+
+Bilingual PDFs with QR of voucher code and signature blocks.
+
+CSV import/export with dry-run validator and downloadable error report.
+
+7) Acceptance Tests (must pass before UI pages)
+
+Create a PHPUnit test suite under /tests/ and make it pass before building pages.
+
+Required tests
+
+DTR coverage: Every movement (GRN, PUTAWAY, ISSUE, RETURN, TRANSFER, ADJUST, ASSEMBLY_BUILD, ASSEMBLY_UNBUILD) posts one or more transactions rows correctly.
+
+Backflush math: Build 10 FG with a BOM line of 2.5 qty and 5% wastage ⇒ component issue = 26.25 (use rounding rule you implement; document it and test for it).
+
+Row-level scope: A storekeeper restricted to warehouse_id=2 cannot list/read/write any stock, DTR, or WO in warehouse_id=1 (expect 403).
+
+Idempotency: Repeating a POST with the same X-Client-Request-Id does not double-post and returns the same result.
+
+Sequencing: Codes match PO-YYYY-#### format and are monotonically increasing within year.
+
+3-Way match basics: invoice lines reconcile to PO & GRN; discrepancies are flagged.
+
+Valuation: In WAV, inbound changes average cost; outbound uses current WAV. In FIFO, outbound consumes layers in order.
+
+BOM versioning: Only one active version; activation writes to audit log.
+
+Arabic/English: endpoints/pages expose i18n keys and return localized labels; PDF headers render bilingual.
+
+Data seeders (for tests & demo)
+
+5 items (mixed: batch/serial flags), 2 warehouses, 6 bins, 2 suppliers.
+
+A complete RFQ→PO→GRN→Put-Away flow.
+
+A WO with backflush ON and successful build.
+
+Users: Admin (all), Storekeeper (WH=2 only), Planner, Procurement.
+
+8) Build Order (follow strictly)
+
+Print the plan: Restate architecture, DB tables, endpoints, and the repo tree you will create.
+
+Migrations + Seeders (including sequences, audit_log, production tables).
+
+Helpers: seq.php, dtr.php, pdf.php, csv.php, cache.php.
+
+Middleware: JWT auth, require_permission, apply_scopes (WHERE filters).
+
+API endpoints with PHPUnit tests. Make all tests pass.
+
+Pages (Bootstrap + RTL): Ops Cockpit, RFQ/PO board, GRN/Put-Away, MIN/MRN, Transfers/Adjustments, Item 360, Supplier 360, Planner Board, BOM Designer (drag-drop), Fabrication Console.
+
+PDFs for PO/GRN/MIN/MRN/WO with bilingual headers and QR.
+
+CSV importers with dry-run validator & error report.
+
+README.md: exact run steps, .env config, migrate/seed commands, admin bootstrap, how to run tests, and how to build PDFs.
+
+Final output: Print the final file tree.
+
+9) Non-Functional Requirements
+
+Security: JWT, HTTPS, server-side validation, RBAC checks everywhere, audit on all writes.
+
+Performance: pagination, indexes, caching hot masters.
+
+Reliability: nightly backups, error logs, health checks.
+
+Localization: i18n JSON for EN/AR, full RTL.
+
+Extensibility: REST APIs & webhooks (future).
+
+Jordan VAT & multi-currency support on PO/invoice.
+
+10) Deliverables
+
+Full source code following the structure above.
+
+README.md with one-command run instructions (consider a basic PHP built-in server or Docker option).
+
+tests/ with all acceptance tests.
+
+postman_collection.json and openapi.json.
+
+Seed data and a demo flow I can click through.
+
+A printed final tree of the repo.
+
+Now start by summarizing the plan and printing the file tree you intend to generate. Do not create files until you restate and I confirm the plan (since I’m not experienced). After confirmation, proceed step by step with clear instructions.
+
+Thinking
